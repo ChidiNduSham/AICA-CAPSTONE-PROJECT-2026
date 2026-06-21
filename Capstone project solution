@@ -1,0 +1,67 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+# Load data
+demographics = pd.read_csv('telecom_demographics_nigeria.csv')
+usage = pd.read_csv('telecom_usage.csv')
+churn_df = pd.merge(demographics, usage, on='customer_id', how='inner')
+
+# One-hot encode categorical variables
+churn_encoded = pd.get_dummies(churn_df, 
+                               columns=['telecom_partner', 'gender', 'state'], 
+                               drop_first=True)
+
+# Drop columns not useful for modeling
+cols_to_drop = ['customer_id', 'city', 'pincode', 'registration_event']
+churn_encoded = churn_encoded.drop(columns=cols_to_drop)
+
+# Separate features and target
+X = churn_encoded.drop('churn', axis=1)
+y = churn_encoded['churn']
+
+# Split data FIRST (before any scaling)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+# Scale ONLY numeric columns using training data
+numeric_cols = ['age', 'num_dependents', 'estimated_salary', 'calls_made', 'sms_sent', 'data_used']
+
+scaler = StandardScaler()
+X_train_scaled = X_train.copy()
+X_train_scaled[numeric_cols] = scaler.fit_transform(X_train[numeric_cols])
+
+X_test_scaled = X_test.copy()
+X_test_scaled[numeric_cols] = scaler.transform(X_test[numeric_cols])
+
+# Train Logistic Regression
+logreg = LogisticRegression(random_state=42, max_iter=1000)
+logreg.fit(X_train_scaled, y_train)
+logreg_pred = logreg.predict(X_test_scaled)
+
+# Train Random Forest
+rf = RandomForestClassifier(random_state=42)
+rf.fit(X_train_scaled, y_train)
+rf_pred = rf.predict(X_test_scaled)
+
+# Evaluate
+logreg_acc = accuracy_score(y_test, logreg_pred)
+rf_acc = accuracy_score(y_test, rf_pred)
+
+print(f"Logistic Regression Accuracy: {logreg_acc:.4f}")
+print(f"Random Forest Accuracy: {rf_acc:.4f}")
+
+print("\n--- Logistic Regression Report ---")
+print(classification_report(y_test, logreg_pred))
+
+print("\n--- Random Forest Report ---")
+print(classification_report(y_test, rf_pred))
+
+# Determine better model
+higher_accuracy = "LogisticRegression" if logreg_acc >= rf_acc else "RandomForest"
+print(f"\nBetter performing model: {higher_accuracy}")
